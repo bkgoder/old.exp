@@ -45,6 +45,44 @@ npx @vscode/vsce package --no-dependencies
 code --install-extension zero-token-tts-1.5.2.vsix
 ```
 
+## Docker + Caddy Deployment (tts.eysho.info)
+
+### Voraussetzungen auf dem Server
+
+- Docker + Docker Compose
+- Caddy (als Reverse-Proxy mit automatischem TLS)
+
+### Schnellstart
+
+```bash
+git clone https://github.com/bkgoder/Zero-Toke-TTS-Runtime.git
+cd Zero-Toke-TTS-Runtime
+
+# Container bauen und starten
+docker compose up -d --build
+
+# Caddy starten
+caddy run --config Caddyfile
+```
+
+### URLs nach dem Deployment
+
+| Dienst | URL |
+|---|---|
+| 🍬 Web UI | https://tts.eysho.info |
+| TTS API | https://tts.eysho.info/api/tts |
+| Health | https://tts.eysho.info/health |
+| MCP/SSE | https://tts.eysho.info/sse |
+
+> **Hinweis:** Caddy übernimmt automatisch TLS via Let's Encrypt.  
+> Alle API-Calls der Web UI laufen über relative Pfade — kein Port-Hardcoding.
+
+### Logs
+
+```bash
+docker compose logs -f
+```
+
 ## Runtime-Manifest
 
 Beim ersten Start lädt die Extension das Manifest unter:

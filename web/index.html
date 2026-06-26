@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="de" data-bs-theme="light">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Zero-Token TTS 🍬</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+      :root {
+        --candy-bg: #fff0f6;
+        --candy-pink: #ff6b9d;
+        --candy-purple: #c44dff;
+        --candy-yellow: #ffbe0b;
+        --candy-shadow: 0 4px 20px rgba(255, 107, 157, 0.25);
+        --candy-radius: 20px;
+      }
+
+      body {
+        background: var(--candy-bg);
+        font-family: Nunito, ui-rounded, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .candy-shell {
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at top right, rgba(255, 190, 11, 0.18), transparent 24rem),
+          radial-gradient(circle at bottom left, rgba(196, 77, 255, 0.15), transparent 24rem),
+          var(--candy-bg);
+      }
+
+      .candy-card,
+      .voice-card,
+      .btn,
+      .form-control,
+      .nav-tabs .nav-link,
+      .list-group-item,
+      .badge {
+        border-radius: var(--candy-radius) !important;
+      }
+
+      .candy-card,
+      .voice-card,
+      .list-group-item {
+        border: 0;
+        box-shadow: var(--candy-shadow);
+      }
+
+      .candy-header {
+        background: linear-gradient(135deg, #ff6b9d 0%, #c44dff 100%);
+        color: #fff;
+      }
+
+      .nav-tabs {
+        border-bottom: 0;
+        gap: 0.5rem;
+      }
+
+      .nav-tabs .nav-link {
+        border: 0;
+        color: var(--candy-purple);
+        background: rgba(255, 255, 255, 0.72);
+        font-weight: 700;
+      }
+
+      .nav-tabs .nav-link.active {
+        background: linear-gradient(135deg, rgba(255, 107, 157, 0.16), rgba(196, 77, 255, 0.16));
+        color: var(--candy-pink);
+      }
+
+      .btn-candy {
+        background: var(--candy-pink);
+        border-color: var(--candy-pink);
+        color: #fff;
+        box-shadow: var(--candy-shadow);
+      }
+
+      .btn-candy:hover,
+      .btn-candy:focus {
+        background: #ff4f8b;
+        border-color: #ff4f8b;
+        color: #fff;
+      }
+
+      .btn-outline-candy {
+        border: 2px solid rgba(255, 107, 157, 0.28);
+        color: var(--candy-pink);
+        background: #fff;
+      }
+
+      .voice-card.active {
+        outline: 3px solid rgba(255, 107, 157, 0.35);
+      }
+
+      .voice-avatar {
+        width: 4rem;
+        height: 4rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        background: linear-gradient(135deg, rgba(255, 107, 157, 0.18), rgba(196, 77, 255, 0.18));
+      }
+
+      .status-dot {
+        width: 0.8rem;
+        height: 0.8rem;
+        border-radius: 50%;
+        display: inline-block;
+      }
+
+      .history-empty {
+        min-height: 14rem;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        color: #8b5a74;
+      }
+
+      [data-bs-theme="dark"] body,
+      [data-bs-theme="dark"] .candy-shell {
+        background: #211127;
+      }
+
+      [data-bs-theme="dark"] .nav-tabs .nav-link,
+      [data-bs-theme="dark"] .btn-outline-candy {
+        background: rgba(33, 17, 39, 0.9);
+        color: #ffc3d7;
+      }
+
+      [data-bs-theme="dark"] .history-empty {
+        color: #f3c7d7;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="candy-shell">
+      <div class="container py-4 py-lg-5">
+        <div class="candy-card candy-header p-4 p-lg-5 mb-4">
+          <div class="d-flex flex-column flex-lg-row gap-3 align-items-lg-center justify-content-between">
+            <div>
+              <p class="text-uppercase fw-bold mb-2 small">Candy Bootstrap 5 UI</p>
+              <h1 class="display-6 fw-bold mb-2">Zero-Token TTS 🍬</h1>
+              <p class="mb-0">Eine süße Single-Page-Web-UI ohne Port-Hardcoding – alle API-Calls laufen relativ.</p>
+            </div>
+            <div class="d-inline-flex align-items-center gap-2 bg-white bg-opacity-25 px-3 py-2 rounded-pill">
+              <span id="serverDot" class="status-dot bg-warning"></span>
+              <span class="fw-semibold">Server</span>
+              <span id="serverLabel">Prüfe...</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="candy-card p-3 p-lg-4">
+          <ul class="nav nav-tabs mb-4" id="candyTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+              <button class="nav-link active" id="speak-tab" data-bs-toggle="tab" data-bs-target="#speak-panel" type="button" role="tab">
+                🎤 Sprechen
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="voices-tab" data-bs-toggle="tab" data-bs-target="#voices-panel" type="button" role="tab">
+                🎵 Stimmen
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="history-tab" data-bs-toggle="tab" data-bs-target="#history-panel" type="button" role="tab">
+                📋 Verlauf
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="system-tab" data-bs-toggle="tab" data-bs-target="#system-panel" type="button" role="tab">
+                ⚙️ System
+              </button>
+            </li>
+          </ul>
+
+          <div class="tab-content">
+            <section class="tab-pane fade show active" id="speak-panel" role="tabpanel" aria-labelledby="speak-tab">
+              <div class="row g-4 align-items-start">
+                <div class="col-12 col-lg-7">
+                  <label for="ttsText" class="form-label fw-semibold">Text für die Ausgabe</label>
+                  <textarea id="ttsText" class="form-control p-3" rows="10" placeholder="Text hier eingeben..."></textarea>
+                  <div class="d-flex flex-column flex-sm-row gap-3 mt-3">
+                    <button id="speakButton" class="btn btn-candy btn-lg px-4">
+                      <i class="bi bi-mic-fill me-2"></i>Jetzt sprechen
+                    </button>
+                    <div class="align-self-center text-body-secondary">
+                      Aktive Stimme: <span id="activeVoiceName" class="fw-semibold">Eva 🇩🇪</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-12 col-lg-5">
+                  <div class="voice-card p-4 h-100">
+                    <h2 class="h5 fw-bold mb-3">Audio-Ausgabe</h2>
+                    <audio id="audioPlayer" class="w-100" controls></audio>
+                    <div id="speakFeedback" class="small text-body-secondary mt-3">Bereit für die nächste Ausgabe.</div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="tab-pane fade" id="voices-panel" role="tabpanel" aria-labelledby="voices-tab">
+              <div id="voicesGrid" class="row g-4"></div>
+            </section>
+
+            <section class="tab-pane fade" id="history-panel" role="tabpanel" aria-labelledby="history-tab">
+              <div id="historyList" class="d-grid gap-3"></div>
+            </section>
+
+            <section class="tab-pane fade" id="system-panel" role="tabpanel" aria-labelledby="system-tab">
+              <div class="row g-4">
+                <div class="col-12 col-lg-6">
+                  <div class="voice-card p-4 h-100">
+                    <h2 class="h5 fw-bold mb-3">Server</h2>
+                    <p class="mb-2">tts.eysho.info — <span id="systemStatusBadge" class="badge text-bg-secondary">Prüfe...</span></p>
+                    <p class="mb-2">Version: <span id="serverVersion">–</span></p>
+                    <p class="mb-4">Uptime: <span id="serverUptime">–</span></p>
+                    <div class="d-flex flex-wrap gap-2">
+                      <button id="healthButton" class="btn btn-outline-candy">Health-Check</button>
+                      <button id="copyMcpButton" class="btn btn-candy">MCP-Config kopieren</button>
+                    </div>
+                    <pre id="healthOutput" class="mt-3 mb-0 p-3 bg-body-tertiary rounded-4 small overflow-auto"></pre>
+                  </div>
+                </div>
+                <div class="col-12 col-lg-6">
+                  <div class="voice-card p-4 h-100">
+                    <h2 class="h5 fw-bold mb-3">Oberfläche</h2>
+                    <div class="form-check form-switch mb-3">
+                      <input class="form-check-input" type="checkbox" role="switch" id="themeToggle">
+                      <label class="form-check-label" for="themeToggle">Dark Mode</label>
+                    </div>
+                    <a class="btn btn-outline-candy w-100 w-sm-auto" href="https://github.com/bkgoder/Zero-Toke-TTS-Runtime" target="_blank" rel="noreferrer">
+                      <i class="bi bi-github me-2"></i>GitHub Repo öffnen
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      const voices = [
+        { id: "de_DE-eva_k-x_low", avatar: "🍓", name: "Eva 🇩🇪", quality: "Niedrig (schnell)", language: "DE" },
+        { id: "de_DE-thorsten_emotional-medium", avatar: "🍫", name: "Thorsten 🇩🇪", quality: "Medium (emotional)", language: "DE" },
+        { id: "en_GB-alan-medium", avatar: "🍬", name: "Alan 🇬🇧", quality: "Medium", language: "EN-GB" },
+        { id: "en_US-amy-medium", avatar: "🧁", name: "Amy 🇺🇸", quality: "Medium", language: "EN-US" },
+      ];
+
+      const state = {
+        historyKey: "zeroTokenTtsHistory",
+        themeKey: "zeroTokenTtsTheme",
+        voiceKey: "zeroTokenTtsVoice",
+        history: [],
+        selectedVoice: localStorage.getItem("zeroTokenTtsVoice") || voices[0].id,
+      };
+
+      const elements = {
+        audioPlayer: document.getElementById("audioPlayer"),
+        activeVoiceName: document.getElementById("activeVoiceName"),
+        copyMcpButton: document.getElementById("copyMcpButton"),
+        healthButton: document.getElementById("healthButton"),
+        healthOutput: document.getElementById("healthOutput"),
+        historyList: document.getElementById("historyList"),
+        serverDot: document.getElementById("serverDot"),
+        serverLabel: document.getElementById("serverLabel"),
+        serverUptime: document.getElementById("serverUptime"),
+        serverVersion: document.getElementById("serverVersion"),
+        speakButton: document.getElementById("speakButton"),
+        speakFeedback: document.getElementById("speakFeedback"),
+        systemStatusBadge: document.getElementById("systemStatusBadge"),
+        themeToggle: document.getElementById("themeToggle"),
+        ttsText: document.getElementById("ttsText"),
+        voicesGrid: document.getElementById("voicesGrid"),
+      };
+
+      function getVoice(id) {
+        return voices.find((voice) => voice.id === id) || voices[0];
+      }
+
+      function readHistory() {
+        try {
+          state.history = JSON.parse(localStorage.getItem(state.historyKey) || "[]");
+        } catch {
+          state.history = [];
+        }
+      }
+
+      function saveHistory() {
+        localStorage.setItem(state.historyKey, JSON.stringify(state.history.slice(0, 10)));
+      }
+
+      function updateTheme(theme) {
+        document.documentElement.setAttribute("data-bs-theme", theme);
+        elements.themeToggle.checked = theme === "dark";
+        localStorage.setItem(state.themeKey, theme);
+      }
+
+      function renderSelectedVoice() {
+        const voice = getVoice(state.selectedVoice);
+        elements.activeVoiceName.textContent = voice.name;
+        elements.voicesGrid.querySelectorAll(".voice-card").forEach((card) => {
+          card.classList.toggle("active", card.dataset.voiceId === state.selectedVoice);
+          const button = card.querySelector("button");
+          button.textContent = card.dataset.voiceId === state.selectedVoice ? "Aktiv" : "Aktivieren";
+          button.classList.toggle("btn-candy", card.dataset.voiceId === state.selectedVoice);
+          button.classList.toggle("btn-outline-candy", card.dataset.voiceId !== state.selectedVoice);
+        });
+      }
+
+      function renderVoices() {
+        elements.voicesGrid.innerHTML = voices.map((voice) => `
+          <div class="col-12 col-md-6">
+            <article class="voice-card p-4 h-100" data-voice-id="${voice.id}">
+              <div class="d-flex align-items-center gap-3 mb-3">
+                <div class="voice-avatar rounded-circle">${voice.avatar}</div>
+                <div>
+                  <h3 class="h5 fw-bold mb-1">${voice.name}</h3>
+                  <span class="badge text-bg-light">${voice.language}</span>
+                </div>
+              </div>
+              <p class="text-body-secondary mb-3">${voice.id}</p>
+              <p class="mb-4">${voice.quality}</p>
+              <button class="btn btn-outline-candy w-100" type="button">Aktivieren</button>
+            </article>
+          </div>
+        `).join("");
+
+        elements.voicesGrid.querySelectorAll(".voice-card button").forEach((button) => {
+          button.addEventListener("click", (event) => {
+            const voiceId = event.currentTarget.closest(".voice-card").dataset.voiceId;
+            state.selectedVoice = voiceId;
+            localStorage.setItem(state.voiceKey, voiceId);
+            renderSelectedVoice();
+          });
+        });
+
+        renderSelectedVoice();
+      }
+
+      function renderHistory() {
+        if (!state.history.length) {
+          elements.historyList.innerHTML = `
+            <div class="history-empty voice-card p-4">
+              <div>
+                <div class="display-3 mb-3">🍬</div>
+                <h3 class="h5 fw-bold">Noch keine Ausgaben 🍬</h3>
+              </div>
+            </div>
+          `;
+          return;
+        }
+
+        elements.historyList.innerHTML = state.history.map((item, index) => `
+          <div class="list-group-item p-4">
+            <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-lg-center">
+              <div>
+                <div class="fw-bold mb-1">${item.text.slice(0, 120)}</div>
+                <div class="small text-body-secondary">${new Date(item.createdAt).toLocaleString("de-DE")} • ${getVoice(item.voice).name}</div>
+              </div>
+              <button class="btn btn-outline-candy replay-button" type="button" data-index="${index}">
+                <i class="bi bi-play-circle me-2"></i>Erneut abspielen
+              </button>
+            </div>
+          </div>
+        `).join("");
+
+        elements.historyList.querySelectorAll(".replay-button").forEach((button) => {
+          button.addEventListener("click", async (event) => {
+            const item = state.history[Number(event.currentTarget.dataset.index)];
+            if (item) {
+              await speakText(item.text, item.voice);
+            }
+          });
+        });
+      }
+
+      async function updateHealthBadge() {
+        try {
+          const response = await fetch("/health");
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          elements.serverDot.className = "status-dot bg-success";
+          elements.serverLabel.textContent = "Online";
+          elements.systemStatusBadge.className = "badge text-bg-success";
+          elements.systemStatusBadge.textContent = "Online";
+        } catch (error) {
+          elements.serverDot.className = "status-dot bg-danger";
+          elements.serverLabel.textContent = "Offline";
+          elements.systemStatusBadge.className = "badge text-bg-danger";
+          elements.systemStatusBadge.textContent = "Offline";
+        }
+      }
+
+      async function loadStatus() {
+        try {
+          const response = await fetch("/status");
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          const status = await response.json();
+          elements.serverVersion.textContent = status.version || "unbekannt";
+          elements.serverUptime.textContent = typeof status.uptimeSeconds === "number"
+            ? `${status.uptimeSeconds}s`
+            : "–";
+        } catch {
+          elements.serverVersion.textContent = "nicht verfügbar";
+          elements.serverUptime.textContent = "–";
+        }
+      }
+
+      async function runHealthCheck() {
+        elements.healthOutput.textContent = "Lade /health ...";
+        try {
+          const response = await fetch("/health");
+          const payload = await response.json();
+          elements.healthOutput.textContent = JSON.stringify(payload, null, 2);
+        } catch (error) {
+          elements.healthOutput.textContent = JSON.stringify({ error: error.message }, null, 2);
+        }
+      }
+
+      async function copyMcpConfig() {
+        const config = {
+          mcpServers: {
+            "tts-skill": {
+              url: "https://tts.eysho.info/sse",
+            },
+          },
+        };
+
+        await navigator.clipboard.writeText(JSON.stringify(config, null, 2));
+        elements.healthOutput.textContent = JSON.stringify({ copied: true, target: "clipboard" }, null, 2);
+      }
+
+      async function speakText(text, voice = state.selectedVoice) {
+        const normalizedText = String(text || "").trim();
+        if (!normalizedText) {
+          elements.speakFeedback.textContent = "Bitte zuerst Text eingeben.";
+          return;
+        }
+
+        elements.speakButton.disabled = true;
+        elements.speakFeedback.textContent = "Audio wird generiert ...";
+
+        try {
+          const response = await fetch("/api/tts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: normalizedText, voice }),
+          });
+
+          if (!response.ok) {
+            const errorBody = await response.text();
+            throw new Error(errorBody || `HTTP ${response.status}`);
+          }
+
+          const blob = await response.blob();
+          const audioUrl = URL.createObjectURL(blob);
+          elements.audioPlayer.src = audioUrl;
+          await elements.audioPlayer.play();
+
+          state.history.unshift({
+            text: normalizedText,
+            voice,
+            createdAt: new Date().toISOString(),
+          });
+          saveHistory();
+          renderHistory();
+
+          elements.speakFeedback.textContent = "Fertig! Die Ausgabe wird abgespielt.";
+        } catch (error) {
+          elements.speakFeedback.textContent = `Fehler: ${error.message}`;
+        } finally {
+          elements.speakButton.disabled = false;
+        }
+      }
+
+      elements.speakButton.addEventListener("click", () => speakText(elements.ttsText.value));
+      elements.healthButton.addEventListener("click", runHealthCheck);
+      elements.copyMcpButton.addEventListener("click", copyMcpConfig);
+      elements.themeToggle.addEventListener("change", (event) => updateTheme(event.target.checked ? "dark" : "light"));
+
+      readHistory();
+      renderVoices();
+      renderHistory();
+      updateTheme(localStorage.getItem(state.themeKey) || "light");
+      updateHealthBadge();
+      loadStatus();
+      setInterval(updateHealthBadge, 10000);
+      setInterval(loadStatus, 10000);
+    </script>
+  </body>
+</html>

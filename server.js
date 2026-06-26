@@ -16,6 +16,14 @@ const crypto = require("crypto");
 const MCP_PORT = process.env.MCP_PORT || 18764;
 const TTS_PORT = process.env.TTS_PORT || 18765;
 const ASSETS_DIR = process.env.TTS_ASSETS_DIR || (process.pkg ? path.join(path.dirname(process.execPath), "tts-server") : path.join(__dirname, "..", "tts-server"));
+const STARTED_AT = Date.now();
+const APP_VERSION = (() => {
+  try {
+    return require("./package.json").version || "unknown";
+  } catch {
+    return "unknown";
+  }
+})();
 
 // ─── API Key Management ──────────────────────────────────────────────────────
 
@@ -170,37 +178,75 @@ class PiperEngine {
 
 const piperEngine = new PiperEngine();
 
+function getStatusPayload(extra = {}) {
+  return {
+    status: "running",
+    version: APP_VERSION,
+    uptimeSeconds: Math.floor((Date.now() - STARTED_AT) / 1000),
+    startedAt: new Date(STARTED_AT).toISOString(),
+    ...extra,
+  };
+}
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    req.on("data", (chunk) => {
+      body += chunk;
+    });
+    req.on("end", () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch (error) {
+        reject(error);
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+async function synthesizeAndRespond(req, res, inputKey) {
+  try {
+    const params = await readJsonBody(req);
+    const text = String(params[inputKey] || "").trim();
+    if (!text) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "text is required" }));
+      return;
+    }
+
+    const audio = await piperEngine.synthesize(text);
+    res.writeHead(200, { "Content-Type": "audio/wav" });
+    res.end(audio);
+  } catch (e) {
+    res.writeHead(500, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: e.message }));
+  }
+}
+
 // ─── TTS HTTP Server ──────────────────────────────────────────────────────────
 
 function startTtsServer(port = TTS_PORT) {
   const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && req.url === "/v1/audio/speech") {
-      let body = "";
-      req.on("data", (c) => (body += c));
-      req.on("end", async () => {
-        try {
-          const params = JSON.parse(body);
-          const text = params.input || "";
-          if (!text.trim()) {
-            res.writeHead(400, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ error: "text is required" }));
-            return;
-          }
+      void synthesizeAndRespond(req, res, "input");
+      return;
+    }
 
-          const audio = await piperEngine.synthesize(text);
-          res.writeHead(200, { "Content-Type": "audio/wav" });
-          res.end(audio);
-        } catch (e) {
-          res.writeHead(500, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: e.message }));
-        }
-      });
+    if (req.method === "POST" && req.url === "/api/tts") {
+      void synthesizeAndRespond(req, res, "text");
       return;
     }
 
     if (req.method === "GET" && req.url === "/health") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ status: "ok" }));
+      return;
+    }
+
+    if (req.method === "GET" && req.url === "/status") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(getStatusPayload({ port, transport: "tts-http" })));
       return;
     }
 
@@ -232,12 +278,32 @@ function startMcpServer(port = MCP_PORT) {
 
     if (req.method === "GET" && req.url === "/status") {
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({
-        status: "running",
+      res.end(JSON.stringify(getStatusPayload({
         ttsPort: TTS_PORT,
         mcpPort: MCP_PORT,
         apiKeys: apiKeys.size,
-      }));
+        transport: "mcp-http",
+      })));
+      return;
+    }
+
+    if (req.method === "GET" && req.url === "/sse") {
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+      });
+      res.write(`event: endpoint\ndata: /mcp\n\n`);
+      res.write(`event: ready\ndata: ${JSON.stringify(getStatusPayload({ transport: "mcp-sse" }))}\n\n`);
+
+      const keepAlive = setInterval(() => {
+        res.write(`: keepalive ${Date.now()}\n\n`);
+      }, 15000);
+
+      req.on("close", () => {
+        clearInterval(keepAlive);
+        res.end();
+      });
       return;
     }
 

@@ -1,0 +1,37 @@
+tts.eysho.info {
+    handle / {
+        reverse_proxy localhost:3000
+    }
+
+    handle /static/* {
+        reverse_proxy localhost:3000
+    }
+
+    handle /api/* {
+        reverse_proxy localhost:18765
+    }
+    handle /health {
+        reverse_proxy localhost:18765
+    }
+    handle /v1/* {
+        reverse_proxy localhost:18765
+    }
+    handle /status {
+        reverse_proxy localhost:18764
+    }
+
+    handle /mcp {
+        reverse_proxy localhost:18764
+    }
+    handle /sse {
+        reverse_proxy localhost:18764
+    }
+
+    handle {
+        reverse_proxy localhost:3000
+    }
+
+    tls {
+        protocols tls1.2 tls1.3
+    }
+}
