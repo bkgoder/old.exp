@@ -4,24 +4,61 @@
 
 set -e
 
+NODE_REQUIRED_MAJOR=18
+NODE_INSTALL_MAJOR=22
+NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+
+load_nvm() {
+    if [ -s "$NVM_DIR/nvm.sh" ]; then
+        # shellcheck disable=SC1090
+        . "$NVM_DIR/nvm.sh"
+        return 0
+    fi
+
+    if ! command -v curl &> /dev/null; then
+        echo "❌ curl ist nicht installiert."
+        echo "   Bitte curl installieren oder nvm manuell einrichten."
+        exit 1
+    fi
+
+    echo "⬇️  Installiere nvm..."
+    curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+
+    if [ ! -s "$NVM_DIR/nvm.sh" ]; then
+        echo "❌ nvm konnte nicht installiert werden."
+        exit 1
+    fi
+
+    # shellcheck disable=SC1090
+    . "$NVM_DIR/nvm.sh"
+}
+
+ensure_node() {
+    if command -v node &> /dev/null; then
+        NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
+        if [ "$NODE_VERSION" -ge "$NODE_REQUIRED_MAJOR" ]; then
+            echo "✅ Node.js $(node -v) gefunden"
+            return 0
+        fi
+
+        echo "⚠️  Node.js $(node -v) ist zu alt. Installiere Node.js ${NODE_INSTALL_MAJOR} via nvm..."
+    else
+        echo "⚠️  Node.js ist nicht installiert. Installiere Node.js ${NODE_INSTALL_MAJOR} via nvm..."
+    fi
+
+    load_nvm
+    nvm install "$NODE_INSTALL_MAJOR"
+    nvm use "$NODE_INSTALL_MAJOR"
+    nvm alias default "$NODE_INSTALL_MAJOR" >/dev/null
+    echo "✅ Node.js $(node -v) via nvm aktiviert"
+}
+
 echo "🚀 Zero-Token TTS — Fresh System Setup"
 echo "========================================"
 echo ""
 
 # 1. Node.js prüfen
-if ! command -v node &> /dev/null; then
-    echo "❌ Node.js ist nicht installiert."
-    echo "   Bitte installieren Sie Node.js ≥ 18 von https://nodejs.org/"
-    exit 1
-fi
-
-NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
-if [ "$NODE_VERSION" -lt 18 ]; then
-    echo "❌ Node.js Version $NODE_VERSION ist zu alt. Mindestens Version 18 erforderlich."
-    exit 1
-fi
-
-echo "✅ Node.js $(node -v) gefunden"
+ensure_node
 
 # 2. npm prüfen
 if ! command -v npm &> /dev/null; then

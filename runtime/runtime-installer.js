@@ -7,7 +7,7 @@ const https = require("https");
 const crypto = require("crypto");
 const { spawnSync } = require("child_process");
 
-const REPOSITORY = "bkgoder/Zero-Toke--TTS-Runtime";
+const REPOSITORY = "bkgoder/Zero-Token-Explotion";
 const MANIFEST_URL = `https://raw.githubusercontent.com/${REPOSITORY}/main/manifest/runtime-v1.json`;
 const WASMEDGE_VERSION = "0.14.1";
 const WASMEDGE_INSTALLER = `https://raw.githubusercontent.com/WasmEdge/WasmEdge/${WASMEDGE_VERSION}/utils/install_v2.sh`;

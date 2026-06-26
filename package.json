@@ -8,14 +8,15 @@
   "license": "SEE LICENSE IN LICENSE",
   "repository": {
     "type": "git",
-    "url": "https://github.com/bkgoder/Zero-Toke--TTS-Runtime.git"
+    "url": "https://github.com/bkgoder/Zero-Token-Explotion.git"
   },
-  "homepage": "https://github.com/bkgoder/Zero-Toke--TTS-Runtime",
+  "homepage": "https://github.com/bkgoder/Zero-Token-Explotion",
   "bugs": {
-    "url": "https://github.com/bkgoder/Zero-Toke--TTS-Runtime/issues"
+    "url": "https://github.com/bkgoder/Zero-Token-Explotion/issues"
   },
   "icon": "resources/icon.png",
   "engines": {
+    "node": ">=18",
     "vscode": "^1.85.0"
   },
   "categories": [

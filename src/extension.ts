@@ -541,7 +541,7 @@ function findSkillFile(): string | undefined {
       "tts-de",
       "SKILL.md",
     ),
-    "/workspaces/Zero-Toke--TTS-Runtime/skills/tts-de/SKILL.md",
+    "/workspaces/Zero-Token-Explotion/skills/tts-de/SKILL.md",
   ];
   return candidates.find((candidate) => fs.existsSync(candidate));
 }

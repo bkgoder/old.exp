@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "manifestVersion": "1.5.2",
-  "repository": "bkgoder/Zero-Toke--TTS-Runtime",
+  "repository": "bkgoder/Zero-Token-Explotion",
   "backends": {
     "piper-local": {
       "status": "stable",

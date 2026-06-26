@@ -19,13 +19,13 @@ function findSkillPath(): string {
     path.join(__dirname, "..", "skills", "tts-de", "SKILL.md"),
     path.join(__dirname, "..", "..", "skills", "tts-de", "SKILL.md"),
     path.join(__dirname, "..", "..", "..", "skills", "tts-de", "SKILL.md"),
-    "/workspaces/Zero-Toke--TTS-Runtime/skills/tts-de/SKILL.md",
+    "/workspaces/Zero-Token-Explotion/skills/tts-de/SKILL.md",
   ];
   for (const c of candidates) {
     if (fs.existsSync(c)) return c;
   }
   // Fallback: Workspace-Pfad
-  return "/workspaces/Zero-Toke--TTS-Runtime/skills/tts-de/SKILL.md";
+  return "/workspaces/Zero-Token-Explotion/skills/tts-de/SKILL.md";
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -675,7 +675,7 @@ function readSkillFile(): string {
   try {
     return fs.readFileSync(findSkillPath(), "utf-8");
   } catch {
-    return "# TTS-Skill\n\nDer Skill konnte nicht geladen werden. Bitte Pfad prüfen:\n/workspaces/Zero-Toke--TTS-Runtime/skills/tts-de/SKILL.md";
+    return "# TTS-Skill\n\nDer Skill konnte nicht geladen werden. Bitte Pfad prüfen:\n/workspaces/Zero-Token-Explotion/skills/tts-de/SKILL.md";
   }
 }
 

@@ -1,6 +1,6 @@
-# Zero-Token TTS — VS Code Voice Studio
+# Zero-Token-Explotion — Zero-Token TTS für VS Code
 
-Lokale Sprachausgabe für VS Code mit Piper-Modellen, Verlauf und Agent-Integration.
+Lokale Sprachausgabe für VS Code mit Piper-Modellen, Verlauf und Agent-Integration im Repository Zero-Token-Explotion.
 
 > **Runtime-Repository:** Die TTS-Server-Binaries werden als GitHub Releases dieses Repository
 > bereitgestellt und beim ersten Start automatisch heruntergeladen. Siehe `manifest/runtime-v1.json`.
@@ -30,15 +30,15 @@ Das Dashboard besitzt vier Tabs:
 
 ### Voraussetzungen
 
-- Node.js 22 für den Entwicklungs-Build
+- Node.js 22 für den Entwicklungs-Build; `./setup.sh` installiert bei Bedarf nvm und Node.js automatisch
 - VS Code 1.85 oder neuer
 - npm
 
 ### Aus dem Repository bauen
 
 ```bash
-git clone https://github.com/bkgoder/Zero-Toke--TTS-Runtime.git
-cd Zero-Toke--TTS-Runtime
+git clone https://github.com/bkgoder/Zero-Token-Explotion.git
+cd Zero-Token-Explotion
 npm ci
 npm run build
 npx @vscode/vsce package --no-dependencies
@@ -55,8 +55,8 @@ code --install-extension zero-token-tts-1.5.2.vsix
 ### Schnellstart
 
 ```bash
-git clone https://github.com/bkgoder/Zero-Toke-TTS-Runtime.git
-cd Zero-Toke-TTS-Runtime
+git clone https://github.com/bkgoder/Zero-Token-Explotion.git
+cd Zero-Token-Explotion
 
 # Container bauen und starten
 docker compose up -d --build
@@ -88,7 +88,7 @@ docker compose logs -f
 Beim ersten Start lädt die Extension das Manifest unter:
 
 ```
-https://raw.githubusercontent.com/bkgoder/Zero-Toke--TTS-Runtime/main/manifest/runtime-v1.json
+https://raw.githubusercontent.com/bkgoder/Zero-Token-Explotion/main/manifest/runtime-v1.json
 ```
 
 Das Manifest beschreibt, welche Backends und Targets für welche Plattformen verfügbar sind.
@@ -140,7 +140,7 @@ npm run watch
 ## Projektstruktur
 
 ```text
-Zero-Toke--TTS-Runtime/
+Zero-Token-Explotion/
 ├── manifest/
 │   └── runtime-v1.json        # Runtime-Manifest für den Bootstrap-Installer
 ├── resources/
