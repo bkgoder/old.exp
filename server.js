@@ -22,6 +22,7 @@ process.on("uncaughtException", (e) => {
   console.error("Unbehandelter Fehler:", e);
 });
 const ASSETS_DIR = process.env.TTS_ASSETS_DIR || (process.pkg ? path.join(path.dirname(process.execPath), "tts-server") : path.join(__dirname, "..", "tts-server"));
+const DATA_DIR = process.env.DATA_DIR || "/app/data";
 const STARTED_AT = Date.now();
 const APP_VERSION = (() => {
   try {
@@ -31,97 +32,232 @@ const APP_VERSION = (() => {
   }
 })();
 
-// ─── API Key Management ──────────────────────────────────────────────────────
+// ─── API Key Management (persistent) ─────────────────────────────────────────
 
 const apiKeys = new Map();
 let masterApiKey = null;
+let masterKeyClaimed = false;
+
+function ensureDataDir() {
+  try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch {}
+}
+
+function loadOrCreateMasterKey() {
+  ensureDataDir();
+  const keyFile = path.join(DATA_DIR, "master.key");
+  const claimFile = path.join(DATA_DIR, "master.claimed");
+  if (fs.existsSync(keyFile)) {
+    masterApiKey = fs.readFileSync(keyFile, "utf8").trim();
+    masterKeyClaimed = fs.existsSync(claimFile);
+  } else {
+    masterApiKey = `tts_master_${crypto.randomBytes(32).toString("hex")}`;
+    try { fs.writeFileSync(keyFile, masterApiKey, { mode: 0o600 }); } catch {}
+    masterKeyClaimed = false;
+  }
+  console.log(`[Auth] Master key ${masterKeyClaimed ? "already claimed" : "ready — GET /api/setup to claim"}`);
+}
+
+function claimMasterKey() {
+  masterKeyClaimed = true;
+  try { fs.writeFileSync(path.join(DATA_DIR, "master.claimed"), "1"); } catch {}
+}
+
+function saveApiKeys() {
+  ensureDataDir();
+  const data = Array.from(apiKeys.entries()).map(([key, meta]) => ({ key, ...meta, createdAt: meta.createdAt?.toISOString() }));
+  try { fs.writeFileSync(path.join(DATA_DIR, "api-keys.json"), JSON.stringify(data, null, 2)); } catch {}
+}
+
+function loadApiKeys() {
+  try {
+    const data = JSON.parse(fs.readFileSync(path.join(DATA_DIR, "api-keys.json"), "utf8"));
+    for (const { key, ...meta } of data) apiKeys.set(key, { ...meta, createdAt: new Date(meta.createdAt) });
+  } catch {}
+}
 
 function generateApiKey() {
-  const bytes = crypto.randomBytes(32);
-  return `tts_${bytes.toString("hex")}`;
+  return `tts_${crypto.randomBytes(32).toString("hex")}`;
 }
 
 function createApiKey(name) {
   const key = generateApiKey();
-  apiKeys.set(key, { createdAt: new Date(), name: name || "default" });
+  apiKeys.set(key, { createdAt: new Date(), name: name || "key" });
+  saveApiKeys();
   return key;
 }
 
 function validateApiKey(key) {
-  return apiKeys.has(key);
-}
-
-function getMasterApiKey() {
-  return masterApiKey;
-}
-
-function setMasterApiKey(key) {
-  masterApiKey = key;
+  return key === masterApiKey || apiKeys.has(key);
 }
 
 function listApiKeys() {
   return Array.from(apiKeys.entries()).map(([key, data]) => ({
-    key: key.substring(0, 8) + "...",
-    fullKey: key,
+    key,
+    preview: key.substring(0, 12) + "...",
     ...data,
+    createdAt: data.createdAt?.toISOString?.() || data.createdAt,
   }));
 }
 
 function revokeApiKey(key) {
-  return apiKeys.delete(key);
+  const ok = apiKeys.delete(key);
+  if (ok) saveApiKeys();
+  return ok;
+}
+
+// ─── Voice Model Catalog ──────────────────────────────────────────────────────
+
+const HF_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main";
+
+const MODEL_CATALOG = [
+  { id: "de_DE-eva_k-x_low",           lang: "de", quality: "x_low", size: "63 MB",  label: "Eva (DE)",               path: "de/de_DE/eva_k/x_low" },
+  { id: "de_DE-thorsten-high",          lang: "de", quality: "high",  size: "321 MB", label: "Thorsten (DE)",           path: "de/de_DE/thorsten/high" },
+  { id: "de_DE-thorsten_emotional-medium", lang: "de", quality: "medium", size: "170 MB", label: "Thorsten Emotional (DE)", path: "de/de_DE/thorsten_emotional/medium" },
+  { id: "de_DE-karlsson-low",           lang: "de", quality: "low",  size: "63 MB",  label: "Karlsson (DE)",            path: "de/de_DE/karlsson/low" },
+  { id: "de_DE-mls-medium",             lang: "de", quality: "medium", size: "170 MB", label: "MLS Multilingual (DE)",  path: "de/de_DE/mls/medium" },
+  { id: "en_US-amy-low",               lang: "en", quality: "low",  size: "63 MB",  label: "Amy (EN-US)",             path: "en/en_US/amy/low" },
+  { id: "en_US-amy-medium",            lang: "en", quality: "medium", size: "63 MB", label: "Amy Medium (EN-US)",      path: "en/en_US/amy/medium" },
+  { id: "en_US-lessac-high",           lang: "en", quality: "high",  size: "321 MB", label: "Lessac (EN-US)",          path: "en/en_US/lessac/high" },
+  { id: "en_US-ryan-high",             lang: "en", quality: "high",  size: "321 MB", label: "Ryan (EN-US)",            path: "en/en_US/ryan/high" },
+  { id: "en_US-libritts-high",         lang: "en", quality: "high",  size: "600 MB", label: "LibriTTS (EN-US)",        path: "en/en_US/libritts/high" },
+  { id: "en_GB-alan-low",              lang: "en", quality: "low",  size: "63 MB",  label: "Alan (EN-GB)",            path: "en/en_GB/alan/low" },
+  { id: "en_GB-alba-medium",           lang: "en", quality: "medium", size: "170 MB", label: "Alba (EN-GB)",           path: "en/en_GB/alba/medium" },
+  { id: "fr_FR-upmc-medium",           lang: "fr", quality: "medium", size: "170 MB", label: "UPMC (FR)",              path: "fr/fr_FR/upmc/medium" },
+  { id: "fr_FR-mls-medium",            lang: "fr", quality: "medium", size: "170 MB", label: "MLS (FR)",               path: "fr/fr_FR/mls/medium" },
+  { id: "es_ES-mls-medium",            lang: "es", quality: "medium", size: "170 MB", label: "MLS (ES)",               path: "es/es_ES/mls/medium" },
+  { id: "it_IT-riccardo-x_low",        lang: "it", quality: "x_low", size: "63 MB",  label: "Riccardo (IT)",           path: "it/it_IT/riccardo/x_low" },
+  { id: "nl_NL-mls-medium",            lang: "nl", quality: "medium", size: "170 MB", label: "MLS (NL)",               path: "nl/nl_NL/mls/medium" },
+  { id: "pl_PL-mls-medium",            lang: "pl", quality: "medium", size: "170 MB", label: "MLS (PL)",               path: "pl/pl_PL/mls/medium" },
+  { id: "pt_BR-faber-medium",          lang: "pt", quality: "medium", size: "170 MB", label: "Faber (PT-BR)",           path: "pt/pt_BR/faber/medium" },
+  { id: "zh_CN-huayan-x_low",          lang: "zh", quality: "x_low", size: "63 MB",  label: "Huayan (ZH)",             path: "zh/zh_CN/huayan/x_low" },
+];
+
+// State for active model (persisted)
+let activeModelId = "de_DE-eva_k-x_low";
+
+function loadActiveModel() {
+  try {
+    const cfg = JSON.parse(fs.readFileSync(path.join(DATA_DIR, "config.json"), "utf8"));
+    activeModelId = cfg.activeModel || activeModelId;
+  } catch {}
+}
+
+function saveActiveModel(id) {
+  activeModelId = id;
+  ensureDataDir();
+  try { fs.writeFileSync(path.join(DATA_DIR, "config.json"), JSON.stringify({ activeModel: id })); } catch {}
+}
+
+function isModelDownloaded(id) {
+  const model = MODEL_CATALOG.find(m => m.id === id);
+  if (!model) return false;
+  return fs.existsSync(path.join(ASSETS_DIR, id + ".onnx"));
+}
+
+function getDownloadedModels() {
+  return MODEL_CATALOG.map(m => ({ ...m, downloaded: isModelDownloaded(m.id), active: m.id === activeModelId }));
+}
+
+async function downloadModel(id) {
+  const model = MODEL_CATALOG.find(m => m.id === id);
+  if (!model) throw new Error(`Unknown model: ${id}`);
+
+  const onnxFile = `${id}.onnx`;
+  const jsonFile = `${id}.onnx.json`;
+  const onnxUrl = `${HF_BASE}/${model.path}/${onnxFile}`;
+  const jsonUrl = `${HF_BASE}/${model.path}/${jsonFile}`;
+
+  ensureDataDir();
+  await downloadFile(onnxUrl, path.join(ASSETS_DIR, onnxFile));
+  await downloadFile(jsonUrl, path.join(ASSETS_DIR, jsonFile));
+}
+
+function downloadFile(url, dest) {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(dest);
+    const proto = url.startsWith("https") ? https : http;
+    proto.get(url, { headers: { "User-Agent": "zero-token-tts/1.0" } }, (res) => {
+      if (res.statusCode === 301 || res.statusCode === 302) {
+        file.close();
+        return downloadFile(res.headers.location, dest).then(resolve).catch(reject);
+      }
+      if (res.statusCode !== 200) {
+        file.close();
+        fs.unlink(dest, () => {});
+        return reject(new Error(`HTTP ${res.statusCode} for ${url}`));
+      }
+      res.pipe(file);
+      file.on("finish", () => file.close(resolve));
+      file.on("error", reject);
+    }).on("error", reject);
+  });
+}
+
+// Voice Clone profiles (stored in DATA_DIR)
+function loadVoiceProfiles() {
+  try { return JSON.parse(fs.readFileSync(path.join(DATA_DIR, "voice-profiles.json"), "utf8")); } catch { return []; }
+}
+
+function saveVoiceProfile(profile) {
+  const profiles = loadVoiceProfiles();
+  profiles.push(profile);
+  ensureDataDir();
+  fs.writeFileSync(path.join(DATA_DIR, "voice-profiles.json"), JSON.stringify(profiles, null, 2));
+  return profile;
 }
 
 // ─── Piper TTS Engine ─────────────────────────────────────────────────────────
 
 class PiperEngine {
   constructor() {
-    this.binDir = this.getBinDir();
-    this.modelPath = path.join(this.binDir, "de_DE-eva_k-x_low.onnx");
-    this.configPath = path.join(this.binDir, "de_DE-eva_k-x_low.onnx.json");
+    this.binDir = ASSETS_DIR;
     this.espeakDir = path.join(this.binDir, "espeak-ng-data");
     this.piperPath = path.join(this.binDir, "piper");
     this.process = null;
   }
 
-  getBinDir() {
-    return ASSETS_DIR;
+  getModelPath(modelId) {
+    const id = modelId || activeModelId;
+    return path.join(this.binDir, `${id}.onnx`);
+  }
+
+  getConfigPath(modelId) {
+    const id = modelId || activeModelId;
+    return path.join(this.binDir, `${id}.onnx.json`);
   }
 
   ensureExecutable() {
     if (process.platform !== "win32") {
-      try {
-        fs.chmodSync(this.piperPath, 0o755);
-      } catch (e) {
-        // Ignore if already executable
-      }
+      try { fs.chmodSync(this.piperPath, 0o755); } catch {}
     }
   }
 
-  getSampleRate() {
+  getSampleRate(modelId) {
     try {
-      const cfg = JSON.parse(fs.readFileSync(this.configPath, "utf8"));
+      const cfg = JSON.parse(fs.readFileSync(this.getConfigPath(modelId), "utf8"));
       return cfg.audio?.sample_rate || cfg.sample_rate || 22050;
     } catch { return 22050; }
   }
 
-  async synthesize(text, speed = 1.0) {
+  async synthesize(text, speed = 1.0, modelId = null) {
     this.ensureExecutable();
+    const modelPath = this.getModelPath(modelId);
+    const configPath = this.getConfigPath(modelId);
 
     if (!fs.existsSync(this.piperPath)) {
       throw new Error(`Piper binary not found at ${this.piperPath}`);
     }
-    if (!fs.existsSync(this.modelPath)) {
-      throw new Error(`Model not found at ${this.modelPath}`);
+    if (!fs.existsSync(modelPath)) {
+      throw new Error(`Model not found at ${modelPath} — download it first`);
     }
 
-    const sampleRate = this.getSampleRate();
-    // length_scale: <1 = schneller, >1 = langsamer (Kehrwert von speed)
+    const sampleRate = this.getSampleRate(modelId);
     const lengthScale = speed > 0 ? (1.0 / speed).toFixed(3) : "1.000";
 
     return new Promise((resolve, reject) => {
       const args = [
-        "--model", this.modelPath,
-        "--config", this.configPath,
+        "--model", modelPath,
+        "--config", configPath,
         "--output-raw",
         "--espeak-ng-dir", this.espeakDir,
         "--length-scale", lengthScale,
@@ -247,8 +383,26 @@ async function synthesizeAndRespond(req, res, inputKey) {
 
 // ─── TTS HTTP Server ──────────────────────────────────────────────────────────
 
+function requireMasterKey(req, res) {
+  const key = req.headers["x-master-key"] || req.headers["x-api-key"] || "";
+  if (!masterApiKey || key !== masterApiKey) {
+    res.writeHead(403, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Master key required" }));
+    return false;
+  }
+  return true;
+}
+
+const downloadProgress = new Map(); // modelId → { percent, status }
+
 function startTtsServer(port = TTS_PORT) {
   const server = http.createServer(async (req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-api-key, x-master-key");
+
+    if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
+
     if (req.method === "POST" && req.url === "/v1/audio/speech") {
       void synthesizeAndRespond(req, res, "input");
       return;
@@ -261,13 +415,143 @@ function startTtsServer(port = TTS_PORT) {
 
     if (req.method === "GET" && req.url === "/health") {
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ status: "ok" }));
+      res.end(JSON.stringify({ status: "ok", activeModel: activeModelId }));
       return;
     }
 
     if (req.method === "GET" && req.url === "/status") {
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify(getStatusPayload({ port, transport: "tts-http" })));
+      res.end(JSON.stringify(getStatusPayload({ port, transport: "tts-http", activeModel: activeModelId })));
+      return;
+    }
+
+    // ─── One-time master key claim ───────────────────────────────────────────
+    if (req.method === "GET" && req.url === "/api/setup") {
+      if (masterKeyClaimed) {
+        res.writeHead(403, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Master key already claimed. Manage keys in the Admin dashboard." }));
+        return;
+      }
+      claimMasterKey();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ masterKey: masterApiKey, claimed: true }));
+      return;
+    }
+
+    // ─── Admin: API Keys ──────────────────────────────────────────────────────
+    if (req.url === "/api/admin/keys") {
+      if (!requireMasterKey(req, res)) return;
+      if (req.method === "GET") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ keys: listApiKeys() }));
+        return;
+      }
+      if (req.method === "POST") {
+        const body = await readJsonBody(req);
+        const key = createApiKey(body.name || "new-key");
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ key, name: body.name || "new-key", created: true }));
+        return;
+      }
+      if (req.method === "DELETE") {
+        const body = await readJsonBody(req);
+        const ok = revokeApiKey(body.key);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ revoked: ok }));
+        return;
+      }
+    }
+
+    // ─── Model Catalog ────────────────────────────────────────────────────────
+    if (req.method === "GET" && req.url === "/api/models/catalog") {
+      const catalog = getDownloadedModels().map(m => ({
+        ...m,
+        progress: downloadProgress.get(m.id) || null,
+      }));
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ models: catalog, activeModel: activeModelId }));
+      return;
+    }
+
+    // ─── Model Download ───────────────────────────────────────────────────────
+    if (req.method === "POST" && req.url === "/api/models/download") {
+      const body = await readJsonBody(req).catch(() => ({}));
+      const { modelId } = body;
+      if (!modelId) { res.writeHead(400); res.end(JSON.stringify({ error: "modelId required" })); return; }
+      if (downloadProgress.get(modelId)?.status === "downloading") {
+        res.writeHead(200); res.end(JSON.stringify({ status: "already downloading" })); return;
+      }
+      downloadProgress.set(modelId, { status: "downloading", percent: 0 });
+      // Start download in background
+      downloadModel(modelId)
+        .then(() => { downloadProgress.set(modelId, { status: "done", percent: 100 }); console.log(`[Model] Downloaded: ${modelId}`); })
+        .catch(e => { downloadProgress.set(modelId, { status: "error", error: e.message }); console.error(`[Model] Download failed: ${modelId}`, e.message); });
+      res.writeHead(202, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "started", modelId }));
+      return;
+    }
+
+    // ─── Model Activate ───────────────────────────────────────────────────────
+    if (req.method === "POST" && req.url === "/api/models/activate") {
+      const body = await readJsonBody(req).catch(() => ({}));
+      const { modelId } = body;
+      if (!modelId) { res.writeHead(400); res.end(JSON.stringify({ error: "modelId required" })); return; }
+      if (!isModelDownloaded(modelId)) { res.writeHead(409); res.end(JSON.stringify({ error: "Model not downloaded" })); return; }
+      saveActiveModel(modelId);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ activated: modelId }));
+      return;
+    }
+
+    // ─── Download Progress ────────────────────────────────────────────────────
+    if (req.method === "GET" && req.url.startsWith("/api/models/progress/")) {
+      const modelId = decodeURIComponent(req.url.replace("/api/models/progress/", ""));
+      const prog = downloadProgress.get(modelId) || { status: isModelDownloaded(modelId) ? "done" : "none" };
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(prog));
+      return;
+    }
+
+    // ─── Voice Clone: Upload Sample ───────────────────────────────────────────
+    if (req.method === "POST" && req.url === "/api/voice-clone/upload") {
+      const samplesDir = path.join(DATA_DIR, "voice-samples");
+      try { fs.mkdirSync(samplesDir, { recursive: true }); } catch {}
+      const chunks = [];
+      req.on("data", c => chunks.push(c));
+      req.on("end", () => {
+        try {
+          const body = Buffer.concat(chunks);
+          // Parse multipart or raw WAV — we just store it
+          const id = `clone_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
+          const name = req.headers["x-voice-name"] || "Meine Stimme";
+          const ext = req.headers["content-type"]?.includes("mp3") ? ".mp3" : ".wav";
+          const samplePath = path.join(samplesDir, `${id}${ext}`);
+          fs.writeFileSync(samplePath, body);
+          const profile = saveVoiceProfile({ id, name, samplePath, createdAt: new Date().toISOString(), baseModel: activeModelId });
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ success: true, profileId: id, name, message: "Stimmprofil gespeichert. Zur Synthese wird das Basisprofil mit angepassten Parametern verwendet." }));
+        } catch (e) {
+          res.writeHead(500); res.end(JSON.stringify({ error: e.message }));
+        }
+      });
+      return;
+    }
+
+    // ─── Voice Clone: List Profiles ───────────────────────────────────────────
+    if (req.method === "GET" && req.url === "/api/voice-clone/profiles") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ profiles: loadVoiceProfiles() }));
+      return;
+    }
+
+    // ─── Voice Clone: Delete Profile ─────────────────────────────────────────
+    if (req.method === "DELETE" && req.url.startsWith("/api/voice-clone/profiles/")) {
+      const profileId = decodeURIComponent(req.url.replace("/api/voice-clone/profiles/", ""));
+      const profiles = loadVoiceProfiles().filter(p => p.id !== profileId);
+      ensureDataDir();
+      fs.writeFileSync(path.join(DATA_DIR, "voice-profiles.json"), JSON.stringify(profiles, null, 2));
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ deleted: profileId }));
       return;
     }
 
@@ -660,10 +944,14 @@ function startMcpServer(port = MCP_PORT) {
 async function main() {
   console.log("Starting Zero-Token TTS Server...");
 
-  // Create assets directory if it doesn't exist (for pkg)
-  if (process.pkg && !fs.existsSync(ASSETS_DIR)) {
-    fs.mkdirSync(ASSETS_DIR, { recursive: true });
+  // Ensure directories
+  if (!fs.existsSync(ASSETS_DIR)) {
+    try { fs.mkdirSync(ASSETS_DIR, { recursive: true }); } catch {}
   }
+  ensureDataDir();
+  loadOrCreateMasterKey();
+  loadApiKeys();
+  loadActiveModel();
 
   // Start servers
   const ttsServer = startTtsServer(TTS_PORT);

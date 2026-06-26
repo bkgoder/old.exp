@@ -15,8 +15,10 @@ services:
       - TTS_BACKEND=http://localhost:18765
       - MCP_BACKEND=http://localhost:18764
       - TTS_ASSETS_DIR=/app/tts-server
+      - DATA_DIR=/app/data
     volumes:
       - tts-data:/app/tts-server
+      - tts-app-data:/app/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:18765/health"]
       interval: 30s
@@ -26,3 +28,4 @@ services:
 
 volumes:
   tts-data:
+  tts-app-data:
