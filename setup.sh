@@ -9,6 +9,15 @@ NODE_REQUIRED_MAJOR=18
 NODE_INSTALL_MAJOR=22
 NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEVCONTAINER_MODE=0
+
+for ARG in "$@"; do
+    case "$ARG" in
+        --devcontainer)
+            DEVCONTAINER_MODE=1
+            ;;
+    esac
+done
 
 load_nvm() {
     if [ -s "$NVM_DIR/nvm.sh" ]; then
@@ -205,9 +214,13 @@ echo "✅ Git $(git --version | cut -d' ' -f3) gefunden"
 
 # 4. Docker installieren (falls nicht vorhanden)
 echo ""
-echo "🐳 Prüfe Docker..."
-ensure_docker
-ensure_docker_compose
+if [ "$DEVCONTAINER_MODE" -eq 1 ]; then
+    echo "🐳 Dev-Container erkannt — Docker-Schritt wird übersprungen"
+else
+    echo "🐳 Prüfe Docker..."
+    ensure_docker
+    ensure_docker_compose
+fi
 
 # 5. VS Code prüfen
 if ! command -v code &> /dev/null; then
@@ -233,29 +246,33 @@ npm run package
 
 # 9. Docker-Container starten
 echo ""
-echo "🐳 Starte Docker-Container..."
-cd "$SCRIPT_DIR"
-if docker compose ps 2>/dev/null | grep -q "zero-token-tts"; then
-  echo "✅ Docker-Container läuft bereits"
+if [ "$DEVCONTAINER_MODE" -eq 1 ]; then
+    echo "🐳 Dev-Container-Modus — Docker-Start wird übersprungen"
 else
-  echo "⬆️  Starte zero-token-tts Container..."
-  docker compose up -d --build
-  echo -n "⏳ Warte auf Health-Check"
-  for i in $(seq 1 30); do
-    sleep 2
-    STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:18765/health 2>/dev/null || echo "0")
-    if [ "$STATUS" = "200" ]; then
-      echo ""
-      echo "✅ Docker-Container ist bereit (Port 18765)"
-      break
+    echo "🐳 Starte Docker-Container..."
+    cd "$SCRIPT_DIR"
+    if docker compose ps 2>/dev/null | grep -q "zero-token-tts"; then
+        echo "✅ Docker-Container läuft bereits"
+    else
+        echo "⬆️  Starte zero-token-tts Container..."
+        docker compose up -d --build
+        echo -n "⏳ Warte auf Health-Check"
+        for i in $(seq 1 30); do
+            sleep 2
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:18765/health 2>/dev/null || echo "0")
+            if [ "$STATUS" = "200" ]; then
+                echo ""
+                echo "✅ Docker-Container ist bereit (Port 18765)"
+                break
+            fi
+            echo -n "."
+            if [ "$i" = "30" ]; then
+                echo ""
+                echo "⚠️  Container startet noch — bitte warten und erneut prüfen:"
+                echo "   docker logs zero-token-tts"
+            fi
+        done
     fi
-    echo -n "."
-    if [ "$i" = "30" ]; then
-      echo ""
-      echo "⚠️  Container startet noch — bitte warten und erneut prüfen:"
-      echo "   docker logs zero-token-tts"
-    fi
-  done
 fi
 
 # 9. MCP-Server in VS Code eintragen
