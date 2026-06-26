@@ -177,9 +177,11 @@ function downloadFile(url, dest) {
     const file = fs.createWriteStream(dest);
     const proto = url.startsWith("https") ? https : http;
     proto.get(url, { headers: { "User-Agent": "zero-token-tts/1.0" } }, (res) => {
-      if (res.statusCode === 301 || res.statusCode === 302) {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode)) {
         file.close();
-        return downloadFile(res.headers.location, dest).then(resolve).catch(reject);
+        fs.unlink(dest, () => {});
+        const loc = res.headers.location;
+        return downloadFile(loc, dest).then(resolve).catch(reject);
       }
       if (res.statusCode !== 200) {
         file.close();
