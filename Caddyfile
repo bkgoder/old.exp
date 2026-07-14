@@ -1,37 +1,85 @@
-tts.eysho.info {
-    handle / {
-        reverse_proxy localhost:3000
-    }
+# Zero-Token Explotion — Caddy reverse proxy (TLS on 443, no ports in public URLs)
+# Deploy: sudo cp Caddyfile /etc/caddy/Caddyfile && sudo caddy reload --config /etc/caddy/Caddyfile
+#
+# Public API scheme (single domain, path prefixes):
+#   LLM/OpenAI  https://api.eysho.info/v1/   (alias /v/ → /v1/)
+#   TTS         https://api.eysho.info/tts/
+#   RAG         https://api.eysho.info/rag/v1/   (alias /rag/v/ → /rag/v1/)
+#   Images/SD   https://api.eysho.info/img/
+# Admin/coding/workers stay on bkg.eysho.info
+#
+# NOTE: nginx is the active reverse proxy on this host. Caddy is disabled (inactive).
+# Subdomain blocks (tts.eysho.info, rag.eysho.info, img.eysho.info) are removed.
 
-    handle /static/* {
-        reverse_proxy localhost:3000
-    }
+{
+	email office@eysho.info
+}
 
-    handle /api/* {
-        reverse_proxy localhost:18765
-    }
-    handle /health {
-        reverse_proxy localhost:18765
-    }
-    handle /v1/* {
-        reverse_proxy localhost:18765
-    }
-    handle /status {
-        reverse_proxy localhost:18764
-    }
+# Unified public API — path-based routing on api.eysho.info
+api.eysho.info {
+	# TTS (BitTTS OpenAI-compatible) — https://api.eysho.info/tts/
+	handle_path /tts/* {
+		reverse_proxy 172.28.0.22:18767
+	}
 
-    handle /mcp {
-        reverse_proxy localhost:18764
-    }
-    handle /sse {
-        reverse_proxy localhost:18764
-    }
+	# RAG (LlamaEdge) — https://api.eysho.info/rag/v1/
+	handle_path /rag/* {
+		reverse_proxy 172.28.0.4:10086
+	}
 
-    handle {
-        reverse_proxy localhost:3000
-    }
+	# Images / Stable Diffusion — https://api.eysho.info/img/
+	handle_path /img/* {
+		reverse_proxy 172.28.0.5:10088
+	}
 
-    tls {
-        protocols tls1.2 tls1.3
-    }
+	# Compatibility: /v/ → /v1/
+	handle /v {
+		redir /v1/ permanent
+	}
+	handle /v/* {
+		uri strip_prefix /v
+		redir /v1{uri} permanent
+	}
+
+	# Compatibility: /rag/v/ → /rag/v1/
+	handle /rag/v {
+		redir /rag/v1/ permanent
+	}
+	handle /rag/v/* {
+		uri strip_prefix /rag/v
+		redir /rag/v1{uri} permanent
+	}
+
+	# LLM / OpenAI-compat only — https://api.eysho.info/v1/
+	handle /v1/* {
+		reverse_proxy localhost:3000
+	}
+
+	# Web glue (/api/* admin proxies, etc.)
+	handle {
+		reverse_proxy localhost:3000
+	}
+
+	tls {
+		protocols tls1.2 tls1.3
+	}
+}
+
+# Cursor worker pool dashboard (root) + Zero-Token admin/coding
+bkg.eysho.info {
+	handle /admin* {
+		reverse_proxy localhost:3000
+	}
+	handle /coding* {
+		reverse_proxy localhost:3000
+	}
+	handle /api/coding-agent* {
+		reverse_proxy localhost:3000
+	}
+	handle {
+		reverse_proxy localhost:18700
+	}
+	tls {
+		protocols tls1.2 tls1.3
+	}
 }
